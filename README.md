@@ -1,0 +1,4 @@
+# 21910-2018 คอมพิวเตอร์และการบำรุงรักษา
+- ฐานข้อมูล Supabase ตั้งค่าใน config.js แล้ว (ตาราง cm21910_students, cm21910_submissions)
+- Admin: pisit2000 / 10206455 | นักศึกษา: รหัสนักศึกษา / 789456123
+- แก้ใบความรู้ ใบงาน ข้อสอบที่ content.js | อัพขึ้น GitHub ดู github-upload.html แล้วเปิด GitHub Pages
