@@ -11,8 +11,8 @@ async function loadAdm(){
  const[a,b]=await Promise.all([sb.from(T_ST).select('*').order('id'),sb.from(T_SM).select('*').limit(5000)]);
  A.st=a.data||[];A.sm=b.data||[]}
 async function admin(tab){if(tab)A.tab=tab;await loadAdm();drawAdmin()}
-function nav(){return`<div class="noprint tabs">${[['dash','📊 แดชบอร์ด'],['table','📋 ตารางรวม'],['grade','✍️ ตรวจใบงาน'],['print','🖨️ พิมพ์คะแนน']].map(([k,l])=>`<button class="${A.tab===k?'':'g'}" onclick="admin('${k}')">${l}</button>`).join(' ')}</div>`}
-function drawAdmin(){app.innerHTML=hdr()+nav()+({dash,table:tbl,grade:gradeList,print:printPage}[A.tab])()}
+function nav(){return`<div class="noprint tabs">${[['dash','📊 แดชบอร์ด'],['table','📋 ตารางรวม'],['grade','✍️ ตรวจใบงาน'],['print','🖨️ พิมพ์คะแนน'],['manage','👥 จัดการรายชื่อ']].map(([k,l])=>`<button class="${A.tab===k?'':'g'}" onclick="admin('${k}')">${l}</button>`).join(' ')}</div>`}
+function drawAdmin(){app.innerHTML=hdr()+nav()+({dash,table:tbl,grade:gradeList,print:printPage,manage}[A.tab])()}
 function goBack(){A.from&&A.from.startsWith('stu:')?studentView(A.from.slice(4)):admin(A.from||'dash')}
 
 function dash(){
@@ -94,3 +94,47 @@ function printReport(kind){
  return`<tr><td>${i+1}<td>${s.id}<td class=l>${esc(s.name)}${cs.map(c=>`<td>${c}`).join('')}<td><b>${sum}</b></tr>`}).join('')}</table>
  <p>${kind==='work'?'* = ส่งช้า · ':''}"-" = ยังไม่ส่ง</p><p style="margin-top:36px">ลงชื่อ .................................................. ครูผู้สอน</p></section>`}).join('');
  app.innerHTML=hdr("admin('print')")+`<div class=noprint><button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div><div class=printable>${body}</div>`}
+
+// ===== จัดการรายชื่อนักศึกษา (เพิ่ม/แก้ไข/ลบ/รีเซ็ตรหัสผ่าน) =====
+function manage(){
+ const rs=rooms(),v=id=>document.getElementById(id)?.value??'';
+ return`<datalist id=rl>${rs.map(r=>`<option value="${esc(r)}">`).join('')}</datalist>
+ <div class=card><h3>เพิ่มนักศึกษาทีละคน</h3><input id=ni placeholder="รหัสนักศึกษา (ตัวเลข)"><input id=nn placeholder="ชื่อ-สกุล"><input id=nr list=rl placeholder="ห้อง" value="${esc(rs[0]||'')}">
+ <button onclick="addStu()">เพิ่มนักศึกษา</button> <small>รหัสผ่านเริ่มต้น = ${esc(C.STUDENT_PASS)}</small></div>
+ <div class=card><h3>เพิ่มหลายคนพร้อมกัน</h3><small>วางรายชื่อจากตารางได้เลย (รหัส + ชื่อ-สกุล บรรทัดละคน ระบบตัดลำดับและคำว่า "กำลังศึกษา" ให้)</small>
+ <textarea id=nb rows=6 placeholder="1    69219100099    นางสาวตัวอย่าง ชื่อดี    กำลังศึกษา"></textarea><input id=nbr list=rl placeholder="ห้อง" value="${esc(rs[0]||'')}">
+ <button onclick="bulkStu()">เพิ่มทั้งหมด</button></div>
+ <div class=card><b>รายชื่อทั้งหมด ${A.st.length} คน</b></div>
+ <div class=sc><table class=full><tr><th>ห้อง<th>รหัส<th>ชื่อ<th></tr>${A.st.map(s=>`<tr class=hv><td>${esc(s.room)}<td>${s.id}<td>${esc(s.name)}<td><button class=g onclick="editStu('${s.id}')">แก้ไข</button> <button class=g onclick="pwStu('${s.id}')">รีเซ็ตรหัสผ่าน</button> <button class=r onclick="delStu('${s.id}')">ลบ</button></tr>`).join('')}</table></div>`}
+async function addStu(){
+ const g=i=>document.getElementById(i).value.trim(),id=g('ni'),name=g('nn'),room=g('nr');
+ if(!/^\d{6,}$/.test(id)||!name||!room)return alert('กรุณากรอกรหัส (ตัวเลข) ชื่อ และห้องให้ครบ');
+ if(A.st.some(s=>s.id===id))return alert('มีรหัสนักศึกษานี้อยู่แล้ว');
+ const{error}=await sb.from(T_ST).insert({id,name,room,password:C.STUDENT_PASS});
+ if(error)return alert('เพิ่มไม่สำเร็จ: '+error.message);
+ alert('เพิ่มแล้ว: '+name);admin('manage')}
+async function bulkStu(){
+ const room=document.getElementById('nbr').value.trim(),txt=document.getElementById('nb').value;
+ if(!room)return alert('กรุณาระบุห้อง');
+ const seen=new Set(A.st.map(s=>s.id)),rows=[];let dup=0;
+ txt.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{
+  const p=l.split(/\s+/).filter(Boolean),i=p.findIndex(x=>/^\d{8,}$/.test(x));if(i<0)return;
+  const name=p.slice(i+1).filter(x=>x!=='กำลังศึกษา').join(' ');if(!name)return;
+  if(seen.has(p[i])){dup++;return}seen.add(p[i]);rows.push({id:p[i],name,room,password:C.STUDENT_PASS})});
+ if(!rows.length)return alert('ไม่พบรายชื่อใหม่ที่เพิ่มได้'+(dup?` (ซ้ำกับที่มีอยู่ ${dup} คน)`:''));
+ if(!confirm(`เพิ่มนักศึกษา ${rows.length} คน เข้าห้อง ${room}${dup?` (ข้ามที่ซ้ำ ${dup} คน)`:''} ?`))return;
+ const{error}=await sb.from(T_ST).insert(rows);
+ if(error)return alert('เพิ่มไม่สำเร็จ: '+error.message);
+ alert('เพิ่มแล้ว '+rows.length+' คน');admin('manage')}
+async function editStu(id){
+ const s=nm(id),name=prompt('ชื่อ-สกุล',s.name);if(name===null)return;
+ const room=prompt('ห้อง',s.room);if(room===null||!name.trim()||!room.trim())return;
+ const{error}=await sb.from(T_ST).update({name:name.trim(),room:room.trim()}).eq('id',id);
+ if(error)return alert('แก้ไขไม่สำเร็จ: '+error.message);admin('manage')}
+async function pwStu(id){
+ if(!confirm('รีเซ็ตรหัสผ่านของ '+nm(id).name+' เป็นค่าเริ่มต้น?'))return;
+ await sb.from(T_ST).update({password:C.STUDENT_PASS}).eq('id',id);alert('รีเซ็ตแล้ว')}
+async function delStu(id){
+ if(!confirm('ลบ '+nm(id).name+' ?\nผลใบงานและคะแนนสอบของนักศึกษาคนนี้จะถูกลบทั้งหมด'))return;
+ const{error}=await sb.from(T_ST).delete().eq('id',id);
+ if(error)return alert('ลบไม่สำเร็จ: '+error.message);admin('manage')}
